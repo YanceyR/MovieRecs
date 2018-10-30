@@ -69,6 +69,39 @@ testSet[testSet == 1] = 0
 testSet[testSet == 2] = 0
 testSet[testSet >= 3] = 1
 
+class RBM():
+    def __init__(self, visible_nodes_count, hidden_nodes_count):
+        self.visible_nodes_count = visible_nodes_count
+        self.hidden_nodes_count = hidden_nodes_count
+        
+        # weights are initialized with random values with normal distribution
+        self.weights = torch.randn(visible_nodes_count, hidden_nodes_count)
+        
+        # tensor functions dont accept single dim tensors
+        self.hidden_bias = torch.randn(1, hidden_nodes_count)
+        self.visible_bias = torch.randn(1, visible_nodes_count)
+        
+        # get hidden neurons that were activated according to p (hidden | visible)
+        def get_hidden_sample(self, visible_neurons):
+            weight_x_neurons = torch.mm(visible_neurons, self.weights.t())
+            
+            # make sure bias is applied to each row in wn
+            activation_func = weight_x_neurons + self.hidden_bias.expand_as(weight_x_neurons)
+            
+            # Each element corresponds to each hidden node.
+            # Each element is the probability that the hidden node is activated.
+            prob_hidden_given_visible = torch.sigmoid(activation_func)
+            
+            # sample of hidden neurons usng Bernoulli sampling,
+            # generate random val between 0 and 1.
+            # If val <= probability, neuron is activated i.e cell == 1, else 0
+            hidden_sample = torch.bernoulli(prob_hidden_given_visible)
+            
+            return prob_hidden_given_visible, hidden_sample
+            
+            
+            
+
 
 
 
