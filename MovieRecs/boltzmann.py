@@ -54,4 +54,25 @@ def convert(data):
 trainingSet = convert(trainingSet)
 testSet = convert(testSet)
 
-    
+# convert matrix into tensors, arrays with single data type
+trainingSet = torch.FloatTensor(trainingSet)
+testSet = torch.FloatTensor(testSet)
+
+# convert ratings into binary rating for boltzmann machine
+trainingSet[trainingSet == 0] = -1
+trainingSet[trainingSet == 1] = 0
+trainingSet[trainingSet == 2] = 0
+trainingSet[trainingSet >= 3] = 1
+
+testSet[testSet == 0] = -1
+testSet[testSet == 1] = 0
+testSet[testSet == 2] = 0
+testSet[testSet >= 3] = 1
+
+
+
+
+
+
+
+
