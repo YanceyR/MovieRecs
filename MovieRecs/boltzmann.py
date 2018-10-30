@@ -3,11 +3,6 @@
 import numpy
 import pandas
 import torch
-import torch.nn as nn
-import torch.nn.parallel
-import torch.optim as optim
-import torch.utils.data
-from torch.autograd import Variable
 
 # importing datasets
 # movieID, movieName, genre
@@ -26,13 +21,37 @@ movieCol = 1
 ratingCol = 2
 tsCol = 3
 
+# userID, movieID, rating, timestamp
 trainingSet = pandas.read_csv('dataset/ml-100k/u1.base', delimiter = '\t')
 trainingSet = numpy.array(trainingSet, dtype = 'int')
 
+# userID, movieID, rating, timestamp
 testSet = pandas.read_csv('dataset/ml-100k/u1.test', delimiter = '\t')
 testSet = numpy.array(testSet, dtype = 'int')
 
-# MATRIX STRUCTURE | lines : users, cols : movies, cell : ratings
+# Get total number of users and movies
+totalUsers = max(max(trainingSet[:, userCol]), max(testSet[:, userCol]))
+totalMovies = max(max(trainingSet[:, movieCol]), max(testSet[:, movieCol]))
+
+# Converting data to matrix | lines : users, cols : movies, cell : ratings
 # put zero if user didn't rate movie
-totalUsers = max(max(trainingSet[:,userCol]), max(testSet[:,userCol]))
-totalMovies = max(max(trainingSet[:,movieCol]), max(testSet[:,movieCol]))
+def convert(data):
+    converted_data = []
+    for id_users in range(1, totalUsers + 1):
+        
+        # second [] is a conditional, ndarray
+        id_movies = data[:, movieCol][data[:,0] == id_users]
+        id_ratings = data[:, ratingCol][data[:,0] == id_users]
+        ratings = numpy.zeros(totalMovies)
+                
+        # array indexing is possible because of numpy, type is ndarray
+        ratings[id_movies - 1] = id_ratings
+        converted_data.append(ratings)
+        
+    return converted_data
+        
+        
+trainingSet = convert(trainingSet)
+testSet = convert(testSet)
+
+    
