@@ -4,71 +4,6 @@ import numpy
 import pandas
 import torch
 
-# importing datasets
-# movieID, movieName, genre
-moviesDetails = pandas.read_csv('dataset/ml-1m/movies.dat', sep = '::', header = None, engine = 'python', encoding = 'latin-1')
-
-# userID, Gender, Age, userJobCode, zip
-users = pandas.read_csv('dataset/ml-1m/users.dat', sep = '::', header = None, engine = 'python', encoding = 'latin-1')
-
-# userID, movieID, ratings, timestamp
-ratings = pandas.read_csv('dataset/ml-1m/ratings.dat', sep = '::', header = None, engine = 'python', encoding = 'latin-1')
-
-# prepare training set(80%) and test set(20%) from 100k
-# userID, movieID, rating, timestamp
-userCol = 0
-movieCol = 1
-ratingCol = 2
-tsCol = 3
-
-# userID, movieID, rating, timestamp
-training_set = pandas.read_csv('dataset/ml-100k/u1.base', delimiter = '\t')
-training_set = numpy.array(training_set, dtype = 'int')
-
-# userID, movieID, rating, timestamp
-test_set = pandas.read_csv('dataset/ml-100k/u1.test', delimiter = '\t')
-test_set = numpy.array(test_set, dtype = 'int')
-
-# Get total number of users and movies
-totalUsers = max(max(training_set[:, userCol]), max(test_set[:, userCol]))
-totalMovies = max(max(training_set[:, movieCol]), max(test_set[:, movieCol]))
-
-# Converting data to matrix | lines : users, cols : movies, cell : ratings
-# put zero if user didn't rate movie
-def convert(data):
-    converted_data = []
-    for id_users in range(1, totalUsers + 1):
-
-        # second [] is a conditional, ndarray
-        id_movies = data[:, movieCol][data[:,0] == id_users]
-        id_ratings = data[:, ratingCol][data[:,0] == id_users]
-        ratings = numpy.zeros(totalMovies)
-
-        # array indexing is possible because of numpy, type is ndarray
-        ratings[id_movies - 1] = id_ratings
-        converted_data.append(ratings)
-
-    return converted_data
-
-
-training_set = convert(training_set)
-test_set = convert(test_set)
-
-# convert matrix into tensors, arrays with single data type
-training_set = torch.FloatTensor(training_set)
-test_set = torch.FloatTensor(test_set)
-
-# convert ratings into binary rating for boltzmann machine
-training_set[training_set == 0] = -1
-training_set[training_set == 1] = 0
-training_set[training_set == 2] = 0
-training_set[training_set >= 3] = 1
-
-test_set[test_set == 0] = -1
-test_set[test_set == 1] = 0
-test_set[test_set == 2] = 0
-test_set[test_set >= 3] = 1
-
 class RBM():
     def __init__(self, visible_nodes_count, hidden_nodes_count):
         self.visible_nodes_count = visible_nodes_count
@@ -115,6 +50,72 @@ class RBM():
         self.visible_bias += torch.sum((ratings_per_user - ratings_per_user_k), 0)
         self.hidden_bias += torch.sum((p_hidden_activated - p_hidden_activated_k), 0)
 
+
+# importing datasets
+# movieID, movieName, genre
+moviesDetails = pandas.read_csv('dataset/ml-1m/movies.dat', sep = '::', header = None, engine = 'python', encoding = 'latin-1')
+
+# userID, Gender, Age, userJobCode, zip
+users = pandas.read_csv('dataset/ml-1m/users.dat', sep = '::', header = None, engine = 'python', encoding = 'latin-1')
+
+# userID, movieID, ratings, timestamp
+ratings = pandas.read_csv('dataset/ml-1m/ratings.dat', sep = '::', header = None, engine = 'python', encoding = 'latin-1')
+
+# prepare training set(80%) and test set(20%) from 100k
+# userID, movieID, rating, timestamp
+userCol = 0
+movieCol = 1
+ratingCol = 2
+tsCol = 3
+
+# userID, movieID, rating, timestamp
+training_set = pandas.read_csv('dataset/ml-100k/u1.base', delimiter = '\t')
+training_set = numpy.array(training_set, dtype = 'int')
+
+# userID, movieID, rating, timestamp
+test_set = pandas.read_csv('dataset/ml-100k/u1.test', delimiter = '\t')
+test_set = numpy.array(test_set, dtype = 'int')
+
+# Get total number of users and movies
+totalUsers = max(max(training_set[:, userCol]), max(test_set[:, userCol]))
+totalMovies = max(max(training_set[:, movieCol]), max(test_set[:, movieCol]))
+
+# Converting data to matrix | lines : users, cols : movies, cell : ratings
+# put zero if user didn't rate movie
+def convert_to_matrix(data):
+    converted_data = []
+    for id_users in range(1, totalUsers + 1):
+
+        # second [] is a conditional, ndarray
+        id_movies = data[:, movieCol][data[:,0] == id_users]
+        id_ratings = data[:, ratingCol][data[:,0] == id_users]
+        ratings = numpy.zeros(totalMovies)
+
+        # array indexing is possible because of numpy, type is ndarray
+        ratings[id_movies - 1] = id_ratings
+        converted_data.append(ratings)
+
+    return converted_data
+
+
+training_set = convert_to_matrix(training_set)
+test_set = convert_to_matrix(test_set)
+
+# convert matrix into tensors, arrays with single data type
+training_set = torch.FloatTensor(training_set)
+test_set = torch.FloatTensor(test_set)
+
+# convert ratings into binary rating for boltzmann machine
+training_set[training_set == 0] = -1
+training_set[training_set == 1] = 0
+training_set[training_set == 2] = 0
+training_set[training_set >= 3] = 1
+
+test_set[test_set == 0] = -1
+test_set[test_set == 1] = 0
+test_set[test_set == 2] = 0
+test_set[test_set >= 3] = 1
+
 visible_nodes_count = len(training_set[0])
 
 # Tune hidden_nodes_count and batch_size to improve model
@@ -123,12 +124,13 @@ visible_nodes_count = len(training_set[0])
 hidden_nodes_count = 100
 
 # update weights after several observations and each observation will go into a batch
-# batch_size = 1, update weights after each observation, slow
+# batch_size = 1, number of samples to work through before updating internal params
 batch_size = 100
 rbm = RBM(visible_nodes_count, hidden_nodes_count)
 
 
 # Training the restricted boltzmann machine
+# nuber of times that the algorithm will work through the entire dataset
 number_of_epochs = 10
 
 for epoch in range(1, number_of_epochs + 1):
@@ -160,7 +162,7 @@ for epoch in range(1, number_of_epochs + 1):
         rbm.train(ratings_per_user, ratings_per_user_k, p_hidden_activated, p_hidden_activated_k)
 
         # only include existing rating in training, thus 'ratings_per_user>0'
-        train_loss += torch.mean(torch.abs(ratings_per_user[ratings_per_user>0] - ratings_per_user_k[ratings_per_user>0]))
+        train_loss += torch.mean(torch.abs(ratings_per_user[ratings_per_user>=0] - ratings_per_user_k[ratings_per_user>=0]))
         counter += 1
 
     print(f"Epoch: {epoch}" + f"   loss: {train_loss/counter}")
@@ -169,6 +171,12 @@ for epoch in range(1, number_of_epochs + 1):
 # testing the rbm
 test_loss = 0
 counter = 0.0
+
+t_pred_t = 0
+t_pred_f = 0
+f_pred_f = 0
+f_pred_t = 0
+
 for user_id in range(totalUsers):
     ratings_per_user = training_set[user_id:user_id + 1]
     ratings_per_user_t = test_set[user_id:user_id + 1]
@@ -176,7 +184,29 @@ for user_id in range(totalUsers):
     if len(ratings_per_user_t[ratings_per_user_t>0]) > 0:
         hidden_nodes = rbm.get_hidden_sample(ratings_per_user)[1]
         ratings_per_user = rbm.get_visible_sample(hidden_nodes)[1]
-        test_loss += torch.mean(torch.abs(ratings_per_user_t[ratings_per_user_t>0] - ratings_per_user[ratings_per_user_t>0]))
+        pred_ratings = ratings_per_user[ratings_per_user_t>=0]
+        test_ratings = ratings_per_user_t[ratings_per_user_t>=0]
+        test_loss += torch.mean(torch.abs(test_ratings - pred_ratings))
+
+        for index, rating in enumerate(test_ratings):
+            if rating == 1:
+                if pred_ratings[index] == 1:
+                    t_pred_t += 1
+                else:
+                    t_pred_f += 1
+
+            else:
+                if pred_ratings[index] == 1:
+                    f_pred_t += 1
+                else:
+                    f_pred_f += 1
+
         counter += 1
+
+print()
+print(f"True Positives: {t_pred_t}   |  False Positives: {f_pred_t}")
+print(f"False Negative: {t_pred_f}  |  True Negative: {f_pred_f}\n")
+
+print(f"Precision: {t_pred_t/(t_pred_t + f_pred_t)}\n")
 
 print(f"test loss: {test_loss/counter}")
