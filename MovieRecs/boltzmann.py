@@ -53,7 +53,14 @@ class RBM():
 
 # importing datasets
 # movieID, movieName, genre
-moviesDetails = pandas.read_csv('dataset/ml-1m/movies.dat', sep = '::', header = None, engine = 'python', encoding = 'latin-1')
+movies_details = pandas.read_csv('dataset/ml-1m/movies.dat', sep = '::', header = None, engine = 'python', encoding = 'latin-1')
+movies_details.columns = ['movieID', 'title', 'genre']
+
+# convert movies_details to dict for fast lookup. Will use later don't worry 😉
+movie_id_title = dict()
+movies_details = movies_details.drop(columns='genre')
+movies_details = movies_details.values.tolist()
+movie_id_title = {key: value for (key, value) in movies_details}
 
 # userID, Gender, Age, userJobCode, zip
 users = pandas.read_csv('dataset/ml-1m/users.dat', sep = '::', header = None, engine = 'python', encoding = 'latin-1')
@@ -203,10 +210,54 @@ for user_id in range(totalUsers):
 
         counter += 1
 
+
 print()
-print(f"True Positives: {t_pred_t}   |  False Positives: {f_pred_t}")
+print(f"True Positives: {t_pred_t}  |  False Positives: {f_pred_t}")
 print(f"False Negative: {t_pred_f}  |  True Negative: {f_pred_f}\n")
 
 print(f"Precision: {t_pred_t/(t_pred_t + f_pred_t)}\n")
 
 print(f"test loss: {test_loss/counter}")
+
+def get_user_recs():
+    user_id = int(input(f"Enter a user id between 1 - {totalUsers}\n> "))
+    rec_movie_ids = get_user_rec_ids(user_id)
+
+    print(f"Here are my movie predictions for user {user_id}!\n")
+    print_Recs(rec_movie_ids[0], rec_movie_ids[1])
+
+def get_user_rec_ids(user_id):
+    base_ratings = training_set[user_id:user_id + 1]
+
+    # get hidden nodes for user ratings. Model must be trained first!
+    hidden_nodes = rbm.get_hidden_sample(base_ratings)[1]
+    base_ratings = base_ratings[0]
+
+    # use hidden nodes to predict movie rating
+    pred_ratings = rbm.get_visible_sample(hidden_nodes)[1]
+    pred_ratings = pred_ratings[0]
+
+    thumbs_up_movies_ids = []
+    thumbs_down_movies_ids = []
+    for index, rating in enumerate(base_ratings):
+        if int(rating) == -1:
+            if int(pred_ratings[index]) == 1:
+                # movie id is one plus the index
+                thumbs_up_movies_ids.append(index + 1)
+            else:
+                thumbs_down_movies_ids.append(index + 1)
+
+    return thumbs_up_movies_ids, thumbs_down_movies_ids
+
+def print_Recs(thumbs_up_movies_ids, thumbs_down_movies_ids):
+    print("Thumbs up 😊")
+    for index in range(10):
+        print(f"{index + 1}: {movie_id_title[thumbs_up_movies_ids[index]]}")
+
+    print()
+    print("Thumbs down 😟")
+    for index in range(10):
+        print(f"{index + 1}: {movie_id_title[thumbs_down_movies_ids[index]]}")
+
+
+get_user_recs()
