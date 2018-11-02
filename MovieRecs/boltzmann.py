@@ -60,6 +60,9 @@ class Data():
         self.total_users = max(max(training_set[:, self.user_col_i]), max(test_set[:, self.user_col_i]))
         self.total_movies = max(max(training_set[:, self.movie_col_i]), max(test_set[:, self.movie_col_i]))
 
+    def add_movie_lookup(self, movie_lookup):
+        self.movie_lookup = movie_lookup
+
     def convert_training_matrix(self):
         self.training_set = self.__convert_to_matrix(self.training_set)
 
@@ -90,16 +93,6 @@ class Data():
 
 def main():
     # importing datasets
-    # movieID, movieName, genre
-    movies_details = pandas.read_csv('dataset/ml-1m/movies.dat', sep = '::', header = None, engine = 'python', encoding = 'latin-1')
-    movies_details.columns = ['movieID', 'title', 'genre']
-
-    # convert movies_details to dict for fast lookup. Will use later don't worry 😉
-    movie_id_title = dict()
-    movies_details = movies_details.drop(columns='genre')
-    movies_details = movies_details.values.tolist()
-    movies = {key: value for (key, value) in movies_details}
-
     # userID, Gender, Age, userJobCode, zip
     users = pandas.read_csv('dataset/ml-1m/users.dat', sep = '::', header = None, engine = 'python', encoding = 'latin-1')
 
@@ -116,6 +109,7 @@ def main():
     test_set = numpy.array(test_set, dtype = 'int')
 
     movies_data = Data(training_set, test_set, 0, 1, 2)
+    create_movie_lookup(movies_data)
 
     # Converting data to matrix | lines : users, cols : movies, cell : ratings
     movies_data.convert_training_matrix()
@@ -124,25 +118,36 @@ def main():
     # convert matrix into tensors, arrays with single data type
     movies_data.convert_training_tensor()
     movies_data.convert_test_tensor()
-
-    # convert ratings into binary rating for boltzmann machine
-    movies_data.training_set[movies_data.training_set == 0] = -1
-    movies_data.training_set[movies_data.training_set == 1] = 0
-    movies_data.training_set[movies_data.training_set == 2] = 0
-    movies_data.training_set[movies_data.training_set >= 3] = 1
-
-    movies_data.test_set[movies_data.test_set == 0] = -1
-    movies_data.test_set[movies_data.test_set == 1] = 0
-    movies_data.test_set[movies_data.test_set == 2] = 0
-    movies_data.test_set[movies_data.test_set >= 3] = 1
+    convert_ratings_to_binary(movies_data.training_set)
+    convert_ratings_to_binary(movies_data.test_set)
 
     # hidden nodes corresponds to number of features that will be detected by RBM.
     rbm = RBM(visible_nodes_count=len(movies_data.training_set[0]), hidden_nodes_count=100)
-    train_rbm(rbm, movies_data.training_set, movies_data.total_users)
-    test_rbm(rbm, movies_data.training_set, movies_data.test_set, movies_data.total_users)
-    get_user_recs(movies_data.total_users, movies, rbm, movies_data.training_set)
+    train_rbm(rbm, movies_data)
+    test_rbm(rbm, movies_data)
+    prompt_user_recs(rbm, movies_data)
 
-def train_rbm(rbm, training_set, total_users):
+def create_movie_lookup(movies_data):
+    # movieID, movieName, genre
+    movies_details = pandas.read_csv('dataset/ml-1m/movies.dat', sep = '::', header = None, engine = 'python', encoding = 'latin-1')
+    movies_details.columns = ['movieID', 'title', 'genre']
+
+    # convert movies_details to dict for fast lookup. Will use later don't worry 😉
+    movie_id_title = dict()
+    movies_details = movies_details.drop(columns='genre')
+    movies_details = movies_details.values.tolist()
+    movie_lookup = {key: value for (key, value) in movies_details}
+
+    movies_data.add_movie_lookup(movie_lookup)
+
+# convert ratings into binary rating for boltzmann machine
+def convert_ratings_to_binary(ratings):
+    ratings[ratings == 0] = -1
+    ratings[ratings == 1] = 0
+    ratings[ratings == 2] = 0
+    ratings[ratings >= 3] = 1
+
+def train_rbm(rbm, data):
     # update weights after several observations and each observation will go into a batch
     # batch_size = 1, number of samples to work through before updating internal params
     batch_size = 100
@@ -159,11 +164,11 @@ def train_rbm(rbm, training_set, total_users):
         counter = 0.0
 
         # taking batches of users
-        for user_id in range(0, total_users - batch_size, batch_size):
-            ratings_per_user_k = training_set[user_id:user_id + batch_size]
+        for user_id in range(0, data.total_users - batch_size, batch_size):
+            ratings_per_user_k = data.training_set[user_id:user_id + batch_size]
 
             # constant used to find train_loss
-            ratings_per_user = training_set[user_id:user_id + batch_size]
+            ratings_per_user = data.training_set[user_id:user_id + batch_size]
             p_hidden_activated = rbm.get_hidden_sample(ratings_per_user)[0]
 
             # for loop for k-step contrastive divergence
@@ -185,7 +190,7 @@ def train_rbm(rbm, training_set, total_users):
 
         print(f"Epoch: {epoch}" + f"   loss: {train_loss/counter}")
 
-def test_rbm(rbm, training_set, test_set, totalUsers):
+def test_rbm(rbm, data):
     test_loss = 0
     counter = 0.0
 
@@ -194,9 +199,9 @@ def test_rbm(rbm, training_set, test_set, totalUsers):
     f_pred_f = 0
     f_pred_t = 0
 
-    for user_id in range(totalUsers):
-        ratings_per_user = training_set[user_id:user_id + 1]
-        ratings_per_user_t = test_set[user_id:user_id + 1]
+    for user_id in range(data.total_users):
+        ratings_per_user = data.training_set[user_id:user_id + 1]
+        ratings_per_user_t = data.test_set[user_id:user_id + 1]
 
         if len(ratings_per_user_t[ratings_per_user_t>0]) > 0:
             hidden_nodes = rbm.get_hidden_sample(ratings_per_user)[1]
@@ -228,15 +233,18 @@ def test_rbm(rbm, training_set, test_set, totalUsers):
 
     print(f"test loss: {test_loss/counter}")
 
-def get_user_recs(total_users, movies, rbm, training_set):
-    user_id = int(input(f"Enter a user id between 1 - {int(total_users)}\n> "))
-    rec_movie_ids = get_user_recs_ids(user_id, rbm, training_set)
+def prompt_user_recs(rbm, movies_data):
+    user_id = int(input(f"Enter a user id between 1 - {int(movies_data.total_users)}\n> "))
+    rec_movie_ids = get_user_recs_ids(user_id, rbm, movies_data)
 
-    print(f"Here are my movie predictions for user {user_id}!\n")
-    print_Recs(movies, rec_movie_ids[0], rec_movie_ids[1])
+    print(f"Here are my movie predictions for user {user_id}!")
 
-def get_user_recs_ids(user_id, rbm, training_set):
-    base_ratings = training_set[user_id:user_id + 1]
+    print_movies(movies_data.movie_lookup, rec_movie_ids[0], "Movies you liked ❤️", 10)
+    print_movies(movies_data.movie_lookup, rec_movie_ids[1], "Movies you will like 😊", 10)
+    print_movies(movies_data.movie_lookup, rec_movie_ids[2], "Movies you won't like 😟", 10)
+
+def get_user_recs_ids(user_id, rbm, movies_data):
+    base_ratings = movies_data.training_set[user_id:user_id + 1]
 
     # get hidden nodes for user ratings. Model must be trained first!
     hidden_nodes = rbm.get_hidden_sample(base_ratings)[1]
@@ -246,27 +254,27 @@ def get_user_recs_ids(user_id, rbm, training_set):
     pred_ratings = rbm.get_visible_sample(hidden_nodes)[1]
     pred_ratings = pred_ratings[0]
 
-    thumbs_up_movies_ids = []
-    thumbs_down_movies_ids = []
+    rec_movie_ids = []
+    not_rec_movie_ids = []
+    liked_movie_ids = []
+
     for index, rating in enumerate(base_ratings):
-        if int(rating) == -1:
+        if int(rating) == 1:
+            # movie id is one plus the index
+            liked_movie_ids.append(index + 1)
+        elif int(rating) == -1:
             if int(pred_ratings[index]) == 1:
-                # movie id is one plus the index
-                thumbs_up_movies_ids.append(index + 1)
+                rec_movie_ids.append(index + 1)
             else:
-                thumbs_down_movies_ids.append(index + 1)
+                not_rec_movie_ids.append(index + 1)
 
-    return thumbs_up_movies_ids, thumbs_down_movies_ids
+    return liked_movie_ids, rec_movie_ids, not_rec_movie_ids
 
-def print_Recs(movies, thumbs_up_movies_ids, thumbs_down_movies_ids):
-    print("Thumbs up 😊")
-    for index in range(10):
-        print(f"{index + 1}: {movies[thumbs_up_movies_ids[index]]}")
-
+def print_movies(movie_lookup, movie_ids, message, count):
     print()
-    print("Thumbs down 😟")
-    for index in range(10):
-        print(f"{index + 1}: {movies[thumbs_down_movies_ids[index]]}")
+    print(message)
+    for index in range(count):
+        print(f"{index + 1}: {movie_lookup[movie_ids[index]]}")
 
 if __name__ == '__main__':
     main()
