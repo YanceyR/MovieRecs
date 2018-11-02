@@ -3,6 +3,7 @@
 import numpy
 import pandas
 import torch
+import random
 
 class RBM():
     def __init__(self, visible_nodes_count, hidden_nodes_count):
@@ -233,16 +234,6 @@ def test_rbm(rbm, data):
 
     print(f"test loss: {test_loss/counter}")
 
-def prompt_user_recs(rbm, movies_data):
-    user_id = int(input(f"Enter a user id between 1 - {int(movies_data.total_users)}\n> "))
-    rec_movie_ids = get_user_recs_ids(user_id, rbm, movies_data)
-
-    print(f"Here are my movie predictions for user {user_id}!")
-
-    print_movies(movies_data.movie_lookup, rec_movie_ids[0], "Movies you liked ❤️", 10)
-    print_movies(movies_data.movie_lookup, rec_movie_ids[1], "Movies you will like 😊", 10)
-    print_movies(movies_data.movie_lookup, rec_movie_ids[2], "Movies you won't like 😟", 10)
-
 def get_user_recs_ids(user_id, rbm, movies_data):
     base_ratings = movies_data.training_set[user_id:user_id + 1]
 
@@ -269,6 +260,21 @@ def get_user_recs_ids(user_id, rbm, movies_data):
                 not_rec_movie_ids.append(index + 1)
 
     return liked_movie_ids, rec_movie_ids, not_rec_movie_ids
+
+def prompt_user_recs(rbm, movies_data):
+    again = 1
+    while(again == 1):
+        user_id = int(input(f"Enter a user id between 1 - {int(movies_data.total_users)}\n> "))
+        rec_movie_ids = get_user_recs_ids(user_id, rbm, movies_data)
+
+        print(f"Here are my movie predictions for user {user_id}!")
+
+        print_movies(movies_data.movie_lookup, rec_movie_ids[0], "Movies you liked ❤️", 10)
+        print_movies(movies_data.movie_lookup, rec_movie_ids[1], "Movies you will like 😊", 10)
+        print_movies(movies_data.movie_lookup, rec_movie_ids[2], "Movies you won't like 😟", 10)
+
+        print()
+        again = int(input(f"Would you like to check for another user, Yes (1) or No (0)> "))
 
 def print_movies(movie_lookup, movie_ids, message, count):
     print()
