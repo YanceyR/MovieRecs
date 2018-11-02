@@ -50,6 +50,44 @@ class RBM():
         self.visible_bias += torch.sum((ratings_per_user - ratings_per_user_k), 0)
         self.hidden_bias += torch.sum((p_hidden_activated - p_hidden_activated_k), 0)
 
+class Data():
+    def __init__(self, training_set, test_set, user_col_i, movie_col_i, rating_col_i):
+        self.training_set = training_set
+        self.test_set = test_set
+        self.user_col_i = user_col_i
+        self.movie_col_i = movie_col_i
+        self.rating_col_i = rating_col_i
+        self.total_users = max(max(training_set[:, self.user_col_i]), max(test_set[:, self.user_col_i]))
+        self.total_movies = max(max(training_set[:, self.movie_col_i]), max(test_set[:, self.movie_col_i]))
+
+    def convert_training_matrix(self):
+        self.training_set = self.__convert_to_matrix(self.training_set)
+
+    def convert_test_matrix(self):
+        self.test_set = self.__convert_to_matrix(self.test_set)
+
+    def __convert_to_matrix(self, data):
+        converted_data = []
+        for id_users in range(1, self.total_users + 1):
+
+            # second [] is a conditional, ndarray
+            id_movies = data[:, self.movie_col_i][data[:,0] == id_users]
+            id_ratings = data[:, self.rating_col_i][data[:,0] == id_users]
+            ratings = numpy.zeros(self.total_movies)
+
+            # array indexing is possible because of numpy, type is ndarray
+            # put zero if user didn't rate movie
+            ratings[id_movies - 1] = id_ratings
+            converted_data.append(ratings)
+
+        return converted_data
+
+    def convert_training_tensor(self):
+        self.training_set = torch.FloatTensor(self.training_set)
+
+    def convert_test_tensor(self):
+        self.test_set = torch.FloatTensor(self.test_set)
+
 def main():
     # importing datasets
     # movieID, movieName, genre
@@ -70,12 +108,6 @@ def main():
 
     # prepare training set(80%) and test set(20%) from 100k
     # userID, movieID, rating, timestamp
-    userCol = 0
-    movieCol = 1
-    ratingCol = 2
-    tsCol = 3
-
-    # userID, movieID, rating, timestamp
     training_set = pandas.read_csv('dataset/ml-100k/u1.base', delimiter = '\t')
     training_set = numpy.array(training_set, dtype = 'int')
 
@@ -83,54 +115,32 @@ def main():
     test_set = pandas.read_csv('dataset/ml-100k/u1.test', delimiter = '\t')
     test_set = numpy.array(test_set, dtype = 'int')
 
-    # Get total number of users and movies
-    totalUsers = max(max(training_set[:, userCol]), max(test_set[:, userCol]))
-    totalMovies = max(max(training_set[:, movieCol]), max(test_set[:, movieCol]))
+    movies_data = Data(training_set, test_set, 0, 1, 2)
 
-    training_set = convert_to_matrix(training_set, totalUsers, totalMovies, movieCol, ratingCol)
-    test_set = convert_to_matrix(test_set, totalUsers, totalMovies, movieCol, ratingCol)
+    # Converting data to matrix | lines : users, cols : movies, cell : ratings
+    movies_data.convert_training_matrix()
+    movies_data.convert_test_matrix()
 
     # convert matrix into tensors, arrays with single data type
-    training_set = torch.FloatTensor(training_set)
-    test_set = torch.FloatTensor(test_set)
+    movies_data.convert_training_tensor()
+    movies_data.convert_test_tensor()
 
     # convert ratings into binary rating for boltzmann machine
-    training_set[training_set == 0] = -1
-    training_set[training_set == 1] = 0
-    training_set[training_set == 2] = 0
-    training_set[training_set >= 3] = 1
+    movies_data.training_set[movies_data.training_set == 0] = -1
+    movies_data.training_set[movies_data.training_set == 1] = 0
+    movies_data.training_set[movies_data.training_set == 2] = 0
+    movies_data.training_set[movies_data.training_set >= 3] = 1
 
-    test_set[test_set == 0] = -1
-    test_set[test_set == 1] = 0
-    test_set[test_set == 2] = 0
-    test_set[test_set >= 3] = 1
-
+    movies_data.test_set[movies_data.test_set == 0] = -1
+    movies_data.test_set[movies_data.test_set == 1] = 0
+    movies_data.test_set[movies_data.test_set == 2] = 0
+    movies_data.test_set[movies_data.test_set >= 3] = 1
 
     # hidden nodes corresponds to number of features that will be detected by RBM.
-    hidden_nodes_count = 100
-    visible_nodes_count = len(training_set[0])
-
-    rbm = RBM(visible_nodes_count, hidden_nodes_count)
-    train_rbm(rbm, training_set, totalUsers)
-    test_rbm(rbm, training_set, test_set, totalUsers)
-    get_user_recs(totalUsers, movies, rbm, training_set)
-
-# Converting data to matrix | lines : users, cols : movies, cell : ratings
-# put zero if user didn't rate movie
-def convert_to_matrix(data, total_users, total_movies, movies_col_i, ratings_col_i):
-    converted_data = []
-    for id_users in range(1, total_users + 1):
-
-        # second [] is a conditional, ndarray
-        id_movies = data[:, movies_col_i][data[:,0] == id_users]
-        id_ratings = data[:, ratings_col_i][data[:,0] == id_users]
-        ratings = numpy.zeros(total_movies)
-
-        # array indexing is possible because of numpy, type is ndarray
-        ratings[id_movies - 1] = id_ratings
-        converted_data.append(ratings)
-
-    return converted_data
+    rbm = RBM(visible_nodes_count=len(movies_data.training_set[0]), hidden_nodes_count=100)
+    train_rbm(rbm, movies_data.training_set, movies_data.total_users)
+    test_rbm(rbm, movies_data.training_set, movies_data.test_set, movies_data.total_users)
+    get_user_recs(movies_data.total_users, movies, rbm, movies_data.training_set)
 
 def train_rbm(rbm, training_set, total_users):
     # update weights after several observations and each observation will go into a batch
@@ -219,7 +229,7 @@ def test_rbm(rbm, training_set, test_set, totalUsers):
     print(f"test loss: {test_loss/counter}")
 
 def get_user_recs(total_users, movies, rbm, training_set):
-    user_id = int(input(f"Enter a user id between 1 - {total_users}\n> "))
+    user_id = int(input(f"Enter a user id between 1 - {int(total_users)}\n> "))
     rec_movie_ids = get_user_recs_ids(user_id, rbm, training_set)
 
     print(f"Here are my movie predictions for user {user_id}!\n")
